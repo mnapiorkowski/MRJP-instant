@@ -14,3 +14,5 @@ type Loc = Int
 type CState = (Map Ident Loc, Loc)
 type CM a = StateT CState (Except String) a
 
+data Val = VConst Integer | VRef Loc
+data Op = OAdd | OSub | OMul | ODiv

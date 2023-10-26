@@ -14,16 +14,13 @@ import Data.List (isPrefixOf)
 import Instant.Abs
 
 import Common.Types
+import Common.Utils
 
-data LLVMVal = VConst Integer | VRef Loc
-
-instance Show LLVMVal where
+instance Show Val where
   show (VConst i) = show i
   show (VRef ref) = "%_" ++ show ref
 
-data LLVMOp = OAdd | OSub | OMul | ODiv
-
-instance Show LLVMOp where
+instance Show Op where
   show OAdd = "add i32"
   show OSub = "sub i32"
   show OMul = "mul i32"
@@ -39,15 +36,22 @@ indentLine line =
 indent :: Code -> String
 indent = foldr ((++) . indentLine) ""
 
-header :: Code
-header = [
+preamble :: Code
+preamble = [
   "@dnl = internal constant [4 x i8] c\"%d\\0A\\00\"",
+  "",
   "declare i32 @printf(i8*, ...) ",
+  "",
   "define void @printInt(i32 %x) {",
   "%t0 = getelementptr [4 x i8], [4 x i8]* @dnl, i32 0, i32 0",
   "call i32 (i8*, ...) @printf(i8* %t0, i32 %x)",
   "ret void",
   "}",
+  ""
+  ]
+
+header :: Code
+header = [
   "define i32 @main() {"
   ]
 
@@ -57,34 +61,16 @@ footer = [
   "}"
   ]
 
-newRef :: CM LLVMVal
-newRef = do
-  (state, newLoc) <- get
-  put $ (state, succ newLoc)
-  pure $ VRef newLoc
-
-newVar :: Ident -> CM LLVMVal
-newVar id = do
-  (state, newLoc) <- get
-  put $ (Map.insert id newLoc state, succ newLoc)
-  pure $ VRef newLoc
-
-getVarRef :: Ident -> CM LLVMVal
-getVarRef id = do
-  (state, _) <- get
-  if Map.notMember id state
-    then pure $ VConst 0
-  else pure $ VRef (state Map.! id)
-
-transBinOp :: LLVMOp -> Exp -> Exp -> CM (Code, LLVMVal)
+transBinOp :: Op -> Exp -> Exp -> CM (Code, Val)
 transBinOp op e1 e2 = do
   (code1, v1) <- transExp e1
   (code2, v2) <- transExp e2
   ref <- newRef
-  let codeOp = [show ref ++ " = " ++ show op ++ " " ++ show v1 ++ ", " ++ show v2]
+  let args = show v1 ++ ", " ++ show v2
+  let codeOp = [show ref ++ " = " ++ show op ++ " " ++ args]
   pure (code1 ++ code2 ++ codeOp, ref)
 
-transExp :: Exp -> CM (Code, LLVMVal)
+transExp :: Exp -> CM (Code, Val)
 transExp e = case e of
   ExpAdd e1 e2 -> transBinOp OAdd e1 e2
   ExpSub e1 e2 -> transBinOp OSub e1 e2
@@ -118,8 +104,7 @@ transProgr (Prog stmts) = do
 compileProgr :: Program -> CM String
 compileProgr p = do
   code <- transProgr p
-  let res = indent $ concat [header, code, footer]
-  return res
+  pure $ indent (preamble ++ header ++ code ++ footer)
 
 compile :: Program -> IO String
 compile p = do

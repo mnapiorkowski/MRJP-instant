@@ -1,0 +1,13 @@
+/*
+!.gitignore
+!Makefile
+!README.md
+
+!lib/
+!lib/*
+
+!src/
+src/*
+!src/Instant.cf
+!src/Compiler/
+!src/Compiler/*

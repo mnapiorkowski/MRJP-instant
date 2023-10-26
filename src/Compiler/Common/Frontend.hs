@@ -29,7 +29,7 @@ readSource = do
       hPutStrLn stderr $ "Usage: ./compiler <source file>"
       exitFailure
   else do
-    let path = args !! 0
-    file <- readFile $ path
-    let basename = dropExtension path
-    return (file, basename)
+    let filePath = args !! 0
+    file <- readFile $ filePath
+    let filePathNoExt = dropExtension filePath
+    return (file, filePathNoExt)

@@ -8,9 +8,12 @@ import LLVM.Backend (compile)
 
 main :: IO ()
 main = do
-  (file, basename) <- readSource
+  (file, filePathNoExt) <- readSource
   progr <- analyse file
   code <- compile progr
-  writeFile (basename ++ ".ll") code
-  out <- callProcess "llvm-as" ["-o", basename ++ ".bc", basename ++ ".ll"]
+  writeFile (filePathNoExt ++ ".ll") code
+  out <- callProcess "llvm-as" [
+    "-o", filePathNoExt ++ ".bc", 
+    filePathNoExt ++ ".ll"
+    ]
   return ()
