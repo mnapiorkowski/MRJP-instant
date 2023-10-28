@@ -10,6 +10,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 
 import Data.List (isPrefixOf)
+import qualified Data.DList as DList
 
 import Instant.Abs
 
@@ -34,10 +35,10 @@ indentLine line =
   else "\t" ++ line ++ "\n"
 
 indent :: Code -> String
-indent = foldr ((++) . indentLine) ""
+indent = DList.foldr ((++) . indentLine) ""
 
 preamble :: Code
-preamble = [
+preamble = DList.fromList [
   "@dnl = internal constant [4 x i8] c\"%d\\0A\\00\"",
   "",
   "declare i32 @printf(i8*, ...) ",
@@ -51,12 +52,12 @@ preamble = [
   ]
 
 header :: Code
-header = [
+header = DList.fromList [
   "define i32 @main() {"
   ]
 
 footer :: Code
-footer = [
+footer = DList.fromList [
   "ret i32 0",
   "}"
   ]
@@ -67,8 +68,8 @@ transBinOp op e1 e2 = do
   (code2, v2) <- transExp e2
   ref <- newRef
   let args = show v1 ++ ", " ++ show v2
-  let codeOp = [show ref ++ " = " ++ show op ++ " " ++ args]
-  pure (code1 ++ code2 ++ codeOp, ref)
+  let codeOp = DList.singleton (show ref ++ " = " ++ show op ++ " " ++ args)
+  pure (DList.concat [code1, code2, codeOp], ref)
 
 transExp :: Exp -> CM (Code, Val)
 transExp e = case e of
@@ -76,35 +77,38 @@ transExp e = case e of
   ExpSub e1 e2 -> transBinOp OSub e1 e2
   ExpMul e1 e2 -> transBinOp OMul e1 e2
   ExpDiv e1 e2 -> transBinOp ODiv e1 e2
-  ExpLit int -> pure ([], VConst int)
+  ExpLit int -> pure (DList.empty, VConst int)
   ExpVar id -> do
     ref <- getVar id
-    pure ([], ref)
+    pure (DList.empty, ref)
 
 transStmt :: Stmt -> CM Code
 transStmt s = case s of
   SAss id e -> do
     (code, v) <- transExp e
     ref <- newVar id
-    pure $ code ++ [show ref ++ " = " ++ show OAdd ++ " " ++ show v ++ ", 0"]
+    let codeAss = (show ref ++ " = " ++ show OAdd ++ " " ++ show v ++ ", 0")
+    pure $ DList.append code (DList.singleton codeAss)
   SExp e -> do
     (code, v) <- transExp e
-    pure $ code ++ ["call void @printInt(i32 " ++ show v ++ ")"]
 
-transStmts :: [Stmt]-> [Code] -> CM Code
-transStmts [] acc = pure $ concat $ reverse acc
+    let codePrint = ("call void @printInt(i32 " ++ show v ++ ")")
+    pure $ DList.append code (DList.singleton codePrint)
+
+transStmts :: [Stmt]-> Code -> CM Code
+transStmts [] acc = pure acc
 transStmts (h:t) acc = do
   code <- transStmt h
-  transStmts t (code:acc)
+  transStmts t (DList.append acc code)
 
 transProgr :: Program -> CM Code
 transProgr (Prog stmts) = do
-  transStmts stmts []
+  transStmts stmts DList.empty
 
 compileProgr :: Program -> CM String
 compileProgr p = do
   code <- transProgr p
-  pure $ indent (preamble ++ header ++ code ++ footer)
+  pure $ indent $ DList.concat [preamble, header, code, footer]
 
 compile :: Program -> IO String
 compile p = do

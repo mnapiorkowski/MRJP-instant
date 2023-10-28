@@ -10,6 +10,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 
 import Data.List (isPrefixOf)
+import qualified Data.DList as DList
 
 import Instant.Abs
 
@@ -39,10 +40,10 @@ indentLine line =
   else "\t" ++ line ++ "\n"
 
 indent :: Code -> String
-indent = foldr ((++) . indentLine) ""
+indent = DList.foldr ((++) . indentLine) ""
 
 preamble :: String -> Code
-preamble baseName = [
+preamble baseName = DList.fromList [
   ".source " ++ baseName ++ ".j",
   ".class public " ++ baseName,
   ".super java/lang/Object",
@@ -56,20 +57,20 @@ preamble baseName = [
   ]
 
 header :: Int -> Int -> Code
-header localsCount stackSize = [
+header localsCount stackSize = DList.fromList [
   ".method public static main([Ljava/lang/String;)V",
   ".limit locals " ++ show localsCount,
   ".limit stack " ++ show stackSize
   ]
 
 footer :: Code
-footer = [
+footer = DList.fromList [
   "return",
   ".end method"
   ]
 
 printInt :: Code
-printInt = [
+printInt = DList.fromList [
   "getstatic java/lang/System/out Ljava/io/PrintStream;",
   "swap",
   "invokevirtual java/io/PrintStream/println(I)V"
@@ -91,21 +92,21 @@ stackChange s
   | "invokevirtual" `isPrefixOf` s = -2
   | otherwise = 0
 
-calcStackSize' :: Code -> Int -> Int -> Int
+calcStackSize' :: [String] -> Int -> Int -> Int
 calcStackSize' [] _ max = max
 calcStackSize' (h:t) acc max = do
   let newStackSize = (acc + stackChange h)
   let newMax = if newStackSize > max then newStackSize else max
   calcStackSize' t newStackSize newMax
 
-calcStackSize :: Code -> Int
-calcStackSize code = calcStackSize' code 0 0
+calcStackSize :: [String] -> Int
+calcStackSize instrList = calcStackSize' instrList 0 0
 
 transBinOp :: Op -> Exp -> Exp -> CM Code
 transBinOp op e1 e2 = do
   code1 <- transExp e1
   code2 <- transExp e2
-  pure $ code1 ++ code2 ++ [show op]
+  pure $ DList.concat [code1, code2, DList.singleton (show op)]
 
 transExp :: Exp -> CM Code
 transExp e = case e of
@@ -113,40 +114,40 @@ transExp e = case e of
   ExpSub e1 e2 -> transBinOp OSub e1 e2
   ExpMul e1 e2 -> transBinOp OMul e1 e2
   ExpDiv e1 e2 -> transBinOp ODiv e1 e2
-  ExpLit int -> pure [show $ VConst int]
+  ExpLit int -> pure $ DList.singleton (show $ VConst int)
   ExpVar id -> do
     v <- getVar id
     case v of
-      VRef ref -> pure ["iload" ++ show v]
-      VConst i -> pure [show v]
+      VRef ref -> pure $ DList.singleton ("iload" ++ show v)
+      VConst i -> pure $ DList.singleton (show v)
 
 transStmt :: Stmt -> CM Code
 transStmt s = case s of
   SAss id e -> do
     code <- transExp e
     v <- getRef id
-    pure $ code ++ ["istore" ++ show v]
+    pure $ DList.append code $ DList.singleton ("istore" ++ show v)
   SExp e -> do
     code <- transExp e
-    pure $ code ++ printInt
+    pure $ DList.append code printInt
 
-transStmts :: [Stmt]-> [Code] -> CM Code
-transStmts [] acc = pure $ concat $ reverse acc
+transStmts :: [Stmt]-> Code -> CM Code
+transStmts [] acc = pure acc
 transStmts (h:t) acc = do
   code <- transStmt h
-  transStmts t (code:acc)
+  transStmts t (DList.append acc code)
 
 transProgr :: Program -> CM Code
 transProgr (Prog stmts) = do
-  code <- transStmts stmts []
+  code <- transStmts stmts DList.empty
   (_, localsCount) <- get
-  let maxStack = calcStackSize code
-  return $ (header (localsCount + 1) maxStack) ++ code ++ footer
+  let maxStack = calcStackSize $ DList.toList code
+  return $ DList.concat [(header (localsCount + 1) maxStack), code, footer]
 
 compileProgr :: Program -> String -> CM String
 compileProgr p baseName = do
   code <- transProgr p
-  pure $ indent (preamble baseName ++ code)
+  pure $ indent $ DList.append (preamble baseName) code
 
 compile :: Program -> String -> IO String
 compile p baseName = do

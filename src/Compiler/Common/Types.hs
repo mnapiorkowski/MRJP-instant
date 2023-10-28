@@ -4,11 +4,11 @@ import Control.Monad.Except
 import Control.Monad.State
 
 import Data.Map (Map)
-import qualified Data.Map as Map
+import Data.DList (DList)
 
 import Instant.Abs (Ident)
 
-type Code = [String]
+type Code = DList String
 
 type Loc = Int
 type CState = (Map Ident Loc, Loc)
