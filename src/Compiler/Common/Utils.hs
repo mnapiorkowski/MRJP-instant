@@ -22,8 +22,15 @@ newVar id = do
   put $ (Map.insert id newLoc state, succ newLoc)
   pure $ VRef newLoc
 
-getVarRef :: Ident -> CM Val
-getVarRef id = do
+getRef :: Ident -> CM Val
+getRef id = do
+  (state, newLoc) <- get
+  if Map.notMember id state
+    then newVar id
+  else pure $ VRef (state Map.! id)
+
+getVar :: Ident -> CM Val
+getVar id = do
   (state, _) <- get
   if Map.notMember id state
     then pure $ VConst 0

@@ -24,7 +24,7 @@ instance Show Op where
   show OAdd = "add i32"
   show OSub = "sub i32"
   show OMul = "mul i32"
-  show ODiv = "div i32"
+  show ODiv = "sdiv i32"
 
 indentLine :: String -> String
 indentLine line =
@@ -78,7 +78,7 @@ transExp e = case e of
   ExpDiv e1 e2 -> transBinOp ODiv e1 e2
   ExpLit int -> pure ([], VConst int)
   ExpVar id -> do
-    ref <- getVarRef id
+    ref <- getVar id
     pure ([], ref)
 
 transStmt :: Stmt -> CM Code
@@ -94,8 +94,8 @@ transStmt s = case s of
 transStmts :: [Stmt]-> [Code] -> CM Code
 transStmts [] acc = pure $ concat $ reverse acc
 transStmts (h:t) acc = do
-  s <- transStmt h
-  transStmts t (s:acc)  
+  code <- transStmt h
+  transStmts t (code:acc)
 
 transProgr :: Program -> CM Code
 transProgr (Prog stmts) = do

@@ -68,6 +68,39 @@ footer = [
   ".end method"
   ]
 
+printInt :: Code
+printInt = [
+  "getstatic java/lang/System/out Ljava/io/PrintStream;",
+  "swap",
+  "invokevirtual java/io/PrintStream/println(I)V"
+  ]
+
+stackChange :: String -> Int
+stackChange s
+  | "iconst" `isPrefixOf` s = 1
+  | "bipush" `isPrefixOf` s = 1
+  | "sipush" `isPrefixOf` s = 1
+  | "ldc" `isPrefixOf` s = 1
+  | "iload" `isPrefixOf` s = 1
+  | "istore" `isPrefixOf` s = -1
+  | "iadd" `isPrefixOf` s = -1
+  | "isub" `isPrefixOf` s = -1
+  | "imul" `isPrefixOf` s = -1
+  | "idiv" `isPrefixOf` s = -1
+  | "getstatic" `isPrefixOf` s = 1
+  | "invokevirtual" `isPrefixOf` s = -2
+  | otherwise = 0
+
+calcStackSize' :: Code -> Int -> Int -> Int
+calcStackSize' [] _ max = max
+calcStackSize' (h:t) acc max = do
+  let newStackSize = (acc + stackChange h)
+  let newMax = if newStackSize > max then newStackSize else max
+  calcStackSize' t newStackSize newMax
+
+calcStackSize :: Code -> Int
+calcStackSize code = calcStackSize' code 0 0
+
 transBinOp :: Op -> Exp -> Exp -> CM Code
 transBinOp op e1 e2 = do
   code1 <- transExp e1
@@ -76,13 +109,13 @@ transBinOp op e1 e2 = do
 
 transExp :: Exp -> CM Code
 transExp e = case e of
-  ExpAdd e1 e2 -> transBinOp OAdd e1 e2
+  ExpAdd e1 e2 -> transBinOp OAdd e2 e1
   ExpSub e1 e2 -> transBinOp OSub e1 e2
   ExpMul e1 e2 -> transBinOp OMul e1 e2
   ExpDiv e1 e2 -> transBinOp ODiv e1 e2
   ExpLit int -> pure [show $ VConst int]
   ExpVar id -> do
-    v <- getVarRef id
+    v <- getVar id
     case v of
       VRef ref -> pure ["iload" ++ show v]
       VConst i -> pure [show v]
@@ -91,25 +124,24 @@ transStmt :: Stmt -> CM Code
 transStmt s = case s of
   SAss id e -> do
     code <- transExp e
-    v <- newVar id
+    v <- getRef id
     pure $ code ++ ["istore" ++ show v]
   SExp e -> do
     code <- transExp e
-    let getstatic = ["getstatic java/lang/System/out Ljava/io/PrintStream;"]
-    let invokevirtual = ["invokevirtual java/io/PrintStream/println(I)V"]
-    pure $ getstatic ++ code ++ invokevirtual
+    pure $ code ++ printInt
 
 transStmts :: [Stmt]-> [Code] -> CM Code
 transStmts [] acc = pure $ concat $ reverse acc
 transStmts (h:t) acc = do
-  s <- transStmt h
-  transStmts t (s:acc)  
+  code <- transStmt h
+  transStmts t (code:acc)
 
 transProgr :: Program -> CM Code
 transProgr (Prog stmts) = do
   code <- transStmts stmts []
   (_, localsCount) <- get
-  return $ header localsCount 100 ++ code ++ footer
+  let maxStack = calcStackSize code
+  return $ (header (localsCount + 1) maxStack) ++ code ++ footer
 
 compileProgr :: Program -> String -> CM String
 compileProgr p baseName = do
