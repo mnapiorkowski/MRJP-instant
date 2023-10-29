@@ -102,33 +102,47 @@ calcStackSize' (h:t) acc max = do
 calcStackSize :: [String] -> Int
 calcStackSize instrList = calcStackSize' instrList 0 0
 
-transBinOp :: Op -> Exp -> Exp -> CM Code
-transBinOp op e1 e2 = do
-  code1 <- transExp e1
-  code2 <- transExp e2
-  pure $ DList.concat [code1, code2, DList.singleton (show op)]
+commutative :: Op -> Bool
+commutative OAdd = True
+commutative OMul = True
+commutative _ = False
 
-transExp :: Exp -> CM Code
+swapNonComm :: Op -> Code
+swapNonComm op =
+  if commutative op
+    then DList.empty
+  else DList.singleton ("swap")
+
+transBinOp :: Op -> Exp -> Exp -> CM (Code, Int)
+transBinOp op e1 e2 = do
+  (code1, stack1) <- transExp e1
+  (code2, stack2) <- transExp e2
+  let codeOp = DList.singleton (show op)
+  let (codes, stack) = case compare stack1 stack2 of
+        EQ -> ([code1, code2, codeOp], stack1 + 1)
+        GT -> ([code1, code2, codeOp], stack1)
+        LT -> ([code2, code1, swapNonComm op, codeOp], stack2)
+  pure (DList.concat codes, stack)
+
+transExp :: Exp -> CM (Code, Int)
 transExp e = case e of
-  ExpAdd e1 e2 -> transBinOp OAdd e2 e1
+  ExpAdd e1 e2 -> transBinOp OAdd e1 e2
   ExpSub e1 e2 -> transBinOp OSub e1 e2
   ExpMul e1 e2 -> transBinOp OMul e1 e2
   ExpDiv e1 e2 -> transBinOp ODiv e1 e2
-  ExpLit int -> pure $ DList.singleton (show $ VConst int)
+  ExpLit int -> pure (DList.singleton (show $ VConst int), 1)
   ExpVar id -> do
-    v <- getVar id
-    case v of
-      VRef ref -> pure $ DList.singleton ("iload" ++ show v)
-      VConst i -> pure $ DList.singleton (show v)
+    ref <- getVar id
+    pure (DList.singleton ("iload" ++ show ref), 1)
 
 transStmt :: Stmt -> CM Code
 transStmt s = case s of
   SAss id e -> do
-    code <- transExp e
+    (code, _) <- transExp e
     v <- getRef id
     pure $ DList.append code $ DList.singleton ("istore" ++ show v)
   SExp e -> do
-    code <- transExp e
+    (code, _) <- transExp e
     pure $ DList.append code printInt
 
 transStmts :: [Stmt]-> Code -> CM Code

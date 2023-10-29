@@ -87,12 +87,11 @@ transStmt s = case s of
   SAss id e -> do
     (code, v) <- transExp e
     ref <- newVar id
-    let codeAss = (show ref ++ " = " ++ show OAdd ++ " " ++ show v ++ ", 0")
+    let codeAss = show ref ++ " = " ++ show OAdd ++ " " ++ show v ++ ", 0"
     pure $ DList.append code (DList.singleton codeAss)
   SExp e -> do
     (code, v) <- transExp e
-
-    let codePrint = ("call void @printInt(i32 " ++ show v ++ ")")
+    let codePrint = "call void @printInt(i32 " ++ show v ++ ")"
     pure $ DList.append code (DList.singleton codePrint)
 
 transStmts :: [Stmt]-> Code -> CM Code
@@ -119,3 +118,4 @@ compile p = do
       hPutStrLn stderr $ "Compilation error: " ++ err
       exitFailure
     Right code -> return code
+    

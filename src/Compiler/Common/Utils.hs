@@ -10,6 +10,9 @@ import Instant.Abs
 
 import Common.Types
 
+throwE :: String -> CM a
+throwE s = lift $ throwError s
+
 newRef :: CM Val
 newRef = do
   (state, newLoc) <- get
@@ -30,8 +33,9 @@ getRef id = do
   else pure $ VRef (state Map.! id)
 
 getVar :: Ident -> CM Val
-getVar id = do
+getVar id@(Ident name) = do
   (state, _) <- get
   if Map.notMember id state
-    then pure $ VConst 0
+    then throwE $ "undefined variable " ++ name
   else pure $ VRef (state Map.! id)
+  
